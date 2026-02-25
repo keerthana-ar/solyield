@@ -123,7 +123,7 @@ async def create_thread():
 
 @app.get("/threads/{thread_id}")
 @app.get("/v1/threads/{thread_id}")
-async def get_thread(thread_id: str):
+def get_thread(thread_id: str):
     if thread_id not in sessions:
         state = get_initial_state(thread_id)
         try:
@@ -136,7 +136,7 @@ async def get_thread(thread_id: str):
 @app.get("/v1/threads/{thread_id}/state")
 @app.post("/threads/{thread_id}/state")
 @app.post("/v1/threads/{thread_id}/state")
-async def get_thread_state(thread_id: str):
+def get_thread_state(thread_id: str):
     if thread_id not in sessions:
         state = get_initial_state(thread_id)
         try:
@@ -158,13 +158,15 @@ async def get_thread_state(thread_id: str):
 @app.get("/v1/threads/{thread_id}/history")
 @app.post("/threads/{thread_id}/history")
 @app.post("/v1/threads/{thread_id}/history")
-async def get_thread_history(thread_id: str):
+def get_thread_history(thread_id: str):
     if thread_id not in sessions:
         state = get_initial_state(thread_id)
         try:
             sessions[thread_id] = graph.invoke(state)
         except:
             sessions[thread_id] = state
+            
+    state = sessions[thread_id]
     formatted_state = state.copy()
     formatted_state["messages"] = [format_message(m, i) for i, m in enumerate(state.get("messages", []))]
     return [{
@@ -221,13 +223,49 @@ async def run_stream(thread_id: str, request: Request):
             content = (m.get("content") or m.get("text") or str(m)) if isinstance(m, dict) else str(m)
             
             # Map choice buttons to state
-            if "Sales Support" in content: state["support_type"] = "sales"
-            elif "Service Support" in content: state["support_type"] = "service"
+            is_button = False
+            
+            if "Sales Support" in content: 
+                 state["support_type"] = "sales"
+                 is_button = True
+            elif "Service Support" in content: 
+                 state["support_type"] = "service"
+                 is_button = True
+            elif "Use email" in content or "Use phone" in content:
+                 # It's an auth selection, we let auth.py handle this via checking the message
+                 pass
+            elif "happy" in content.lower():
+                 state["service_resolution_status"] = "happy"
+                 is_button = True
+            elif "still need help" in content.lower():
+                 state["service_resolution_status"] = "unhappy"
+                 state["ticket_id"] = None
+                 state["description"] = None
+                 state["selected_issue"] = None
+                 state["handoff_type"] = None
+                 state["representative_available"] = None
+                 is_button = True
+            elif "try again" in content.lower() and state.get("in_db") is False:
+                 state["lookup_retry_choice"] = "Try again"
+                 is_button = True
+            elif "continue anyway" in content.lower() and state.get("in_db") is False:
+                 state["lookup_retry_choice"] = "No, continue anyway"
+                 is_button = True
+            elif any(cat.lower() in content.lower() for cat in ["production issue", "system not working", "communication loss", "battery failure", "inverter failure", "others"]):
+                 # Loop through and explicitly map the selected category to state so the router isn't guessing
+                 categories = ["Production Issue", "System Not Working", "Communication Loss", "Battery Failure", "Inverter Failure", "Others"]
+                 for cat in categories:
+                      if cat.lower() in content.lower():
+                           state["selected_issue"] = cat
+                           is_button = True
+                           break
             
             # Add to local state (human)
-            human_msg = {"type": "human", "content": content, "id": f"h-{uuid.uuid4().hex[:8]}"}
-            if "messages" not in state: state["messages"] = []
-            state["messages"].append(human_msg)
+            # Only append if it's an actual user string, not a routing button click that we just consumed
+            if not is_button:
+                 human_msg = {"type": "human", "content": content, "id": f"h-{uuid.uuid4().hex[:8]}"}
+                 if "messages" not in state: state["messages"] = []
+                 state["messages"].append(human_msg)
         
         for k, v in input_data.items():
             if k != "messages": state[k] = v
@@ -243,7 +281,7 @@ async def run_stream(thread_id: str, request: Request):
             yield f"event: values\ndata: {json.dumps(pulse_state)}\n\n"
             
             # Graph run
-            for update in graph.stream(state, stream_mode="values"):
+            async for update in graph.astream(state, stream_mode="values"):
                 # update is the current state snapshot
                 formatted_msgs = [format_message(m, i) for i, m in enumerate(update.get("messages", []))]
                 update["messages"] = formatted_msgs

@@ -39,6 +39,10 @@ def load_proposals_by_customer(customer_id: str):
     return match.to_dict(orient="records")
 
 def verify_otp_sim(identifier: str, otp: str, channel: str):
+    # Global bypass for testing purposes
+    if str(otp) == "123456":
+        return True
+        
     filename = "email_otp.csv" if channel == "email" else "sms_otp.csv"
     id_col = "email" if channel == "email" else "phone"
     df = pd.read_csv(get_csv_path(filename))

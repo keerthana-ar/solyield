@@ -9,8 +9,10 @@ from src.nodes.lookup import customer_lookup, post_auth_router, lookup_failure_r
 from src.nodes.service import (
     service_status_check, service_resolution_router, service_issue_capture, 
     service_issue_context_collect, service_ticket_create, service_nps_and_close, 
-    service_unregistered_start, service_unregistered_issue_start,
-    unregistered_system_router, unregistered_issue_router
+    service_unregistered_start,
+    unregistered_system_router,
+    issue_capture_router, issue_context_router,
+    service_availability_check, availability_router, service_live_chat_start
 )
 from src.nodes.sales import sales_start, sales_proposal_generate, sales_proposal_confirm, sales_router, sales_proposal_review, sales_info_capture, sales_existing_router
 
@@ -40,10 +42,11 @@ def create_graph():
     workflow.add_node("service_status_check", service_status_check)
     workflow.add_node("service_issue_capture", service_issue_capture)
     workflow.add_node("service_issue_context_collect", service_issue_context_collect)
+    workflow.add_node("service_availability_check", service_availability_check)
+    workflow.add_node("service_live_chat_start", service_live_chat_start)
     workflow.add_node("service_ticket_create", service_ticket_create)
     workflow.add_node("service_nps_and_close", service_nps_and_close)
     workflow.add_node("service_unregistered_start", service_unregistered_start)
-    workflow.add_node("service_unregistered_issue_start", service_unregistered_issue_start)
 
     # Sales Flow
     workflow.add_node("sales_start", sales_start)
@@ -58,6 +61,7 @@ def create_graph():
         "auth_verify_otp": "auth_verify_otp",
         "customer_lookup": "customer_lookup",
         "service_status_check": "service_status_check",
+        "lookup_failure_node": "lookup_failure_node",
         "sales_start": "sales_start",
         "__end__": END
     })
@@ -109,20 +113,28 @@ def create_graph():
     # 1. Capture asks for category -> END to wait for input
     # 2. Context Collect asks for desc/photos -> END to wait for input
     # 3. Create Ticket generates ID and ends conversation
-    workflow.add_edge("service_issue_capture", END) 
-    workflow.add_edge("service_issue_context_collect", "service_ticket_create")
-    
-    # Unregistered path sequence:
-    workflow.add_conditional_edges("service_unregistered_start", unregistered_system_router, {
-        "service_unregistered_issue_start": "service_unregistered_issue_start",
+    workflow.add_conditional_edges("service_issue_capture", issue_capture_router, {
+        "service_issue_context_collect": "service_issue_context_collect",
+        "__end__": END
+    })
+    workflow.add_conditional_edges("service_issue_context_collect", issue_context_router, {
+        "service_availability_check": "service_availability_check",
         "__end__": END
     })
     
-    workflow.add_conditional_edges("service_unregistered_issue_start", unregistered_issue_router, {
+    workflow.add_conditional_edges("service_availability_check", availability_router, {
+        "service_live_chat_start": "service_live_chat_start",
         "service_ticket_create": "service_ticket_create",
         "__end__": END
     })
     
+    # Unregistered path sequence merges directly into standard escalation
+    workflow.add_conditional_edges("service_unregistered_start", unregistered_system_router, {
+        "service_issue_capture": "service_issue_capture",
+        "__end__": END
+    })
+    
+    workflow.add_edge("service_live_chat_start", END)
     workflow.add_edge("service_ticket_create", END)
     
     workflow.add_edge("service_nps_and_close", END)

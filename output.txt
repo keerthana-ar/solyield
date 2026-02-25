@@ -1,0 +1,23 @@
+python : C:\Users\Keerthana A R\AppData\Roamin
+g\Python\Python314\site-packages\langchain_cor
+e\_api\deprecation.py:25: UserWarning: Core 
+Pydantic V1 functionality isn't compatible 
+with Python 3.14 or greater.
+At line:1 char:1
++ python test_graph.py 2>&1 | Out-File 
+-Encoding ascii output.txt
++ ~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ( 
+   C:\Users\Keerth....14 or greater.:String)  
+   [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandEr 
+   ror
+ 
+  from pydantic.v1.fields import FieldInfo as 
+FieldInfoV1
+Starting graph run
+Update: dict_keys(['session_id', 'user_role', 'support_type', 'messages', 'auth_verified', 'auth_step', 'auth_identifier_type', 'auth_identifier_value', 'in_db', 'lookup_retries', 'lookup_retry_choice'])
+Messages count: 1
+Update: dict_keys(['session_id', 'user_role', 'support_type', 'messages', 'auth_verified', 'auth_step', 'auth_identifier_type', 'auth_identifier_value', 'in_db', 'lookup_retries', 'lookup_retry_choice', 'service_step'])
+Messages count: 7
+Graph run complete

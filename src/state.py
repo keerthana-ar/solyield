@@ -35,6 +35,7 @@ class State(TypedDict):
     unregistered_year: Optional[str]
     unregistered_online: Optional[bool]
     unregistered_installer: Optional[str]
+    unregistered_system_info: Optional[str]
     
     # Service Information
     issue_flag: Optional[bool]

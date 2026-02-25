@@ -8,34 +8,84 @@ def auth_collect_contact(state: State) -> Dict:
     Node to prompt for email or phone.
     """
     messages = state.get("messages", [])
-    if messages:
-        last_msg = messages[-1]
-        last_type = last_msg.get("type") if isinstance(last_msg, dict) else "human"
+    last_msg = messages[-1] if messages else None
+    
+    auth_type = state.get("auth_identifier_type")
+    auth_val = state.get("auth_identifier_value")
+    auth_step = state.get("auth_step")
+
+    if last_msg:
+        last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
         if last_type == "human":
             content = last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg)
-            # Basic extraction
-            if "@" in content:
-                return {"auth_identifier_value": content.strip().split()[-1], "auth_identifier_type": "email"}
-            elif any(c.isdigit() for c in content):
-                # Assume phone
-                phone = "".join(filter(str.isdigit, content))
-                return {"auth_identifier_value": phone, "auth_identifier_type": "phone"}
+            
+            if auth_step == "failed":
+                if "Retry" in content or "retry" in content.lower():
+                    return {
+                        "auth_step": "identifier",
+                        "auth_identifier_type": "",
+                        "auth_identifier_value": "",
+                        "auth_otp_sent": "",
+                        "auth_otp_retries": 0,
+                        "messages": [
+                            {
+                                "type": "ai",
+                                "content": "Please continue with either your registered email or phone number.",
+                                "additional_kwargs": {
+                                    "options": [
+                                        {"label": "Use email", "value": "email"},
+                                        {"label": "Use phone", "value": "phone"}
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                elif "Exit" in content or "exit" in content.lower():
+                    return {"messages": [{"type": "ai", "content": "Please refresh the page to start over or select a new support option."}], "auth_step": "exit"}
 
-    return {
-        "messages": [
-            {
-                "type": "ai",
-                "content": "Please continue with either your registered email or phone number.",
-                "additional_kwargs": {
-                    "options": [
-                        {"label": "Use email", "value": "email"},
-                        {"label": "Use phone", "value": "phone"}
-                    ]
+            if not auth_type or auth_type == "":
+                # Expecting 'Use email' or 'Use phone'
+                if "use email" in content.lower():
+                    return {
+                        "auth_identifier_type": "email",
+                        "messages": [{"type": "ai", "content": "Enter your email address."}]
+                    }
+                elif "use phone" in content.lower():
+                    return {
+                        "auth_identifier_type": "phone",
+                        "messages": [{"type": "ai", "content": "Enter your mobile number."}]
+                    }
+            elif not auth_val or auth_val == "":
+                # Expecting the actual identifier string
+                if auth_type == "email" and "@" in content:
+                    return {"auth_identifier_value": content.strip().split()[-1]}
+                elif auth_type == "phone" and any(c.isdigit() for c in content):
+                    phone = "".join(c for c in content if c.isdigit() or c == '-')
+                    return {"auth_identifier_value": phone}
+
+    # If we haven't asked yet or they gave invalid input
+    if not auth_type or auth_type == "":
+        return {
+            "messages": [
+                {
+                    "type": "ai",
+                    "content": "Please continue with either your registered email or phone number.",
+                    "additional_kwargs": {
+                        "options": [
+                            {"label": "Use email", "value": "email"},
+                            {"label": "Use phone", "value": "phone"}
+                        ]
+                    }
                 }
-            }
-        ],
-        "auth_step": "identifier"
-    }
+            ],
+            "auth_step": "identifier"
+        }
+    elif not auth_val or auth_val == "":
+        # Prompt again if input was invalid
+        prompt = "Enter your email address." if auth_type == "email" else "Enter your mobile number."
+        return {"messages": [{"type": "ai", "content": prompt}]}
+        
+    return {}
 
 
 def auth_send_otp(state: State) -> Dict:
@@ -62,12 +112,12 @@ def auth_verify_otp(state: State) -> Dict:
     
     if not user_otp and messages:
         last_msg = messages[-1]
-        last_type = last_msg.get("type") if isinstance(last_msg, dict) else "human"
+        last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
         if last_type == "human":
             content = last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg)
-            # Find a 6 digit number
+            # Find a 4 to 6 digit number
             import re
-            match = re.search(r'\b\d{6}\b', content)
+            match = re.search(r'\b\d{4,6}\b', content)
             if match:
                 user_otp = match.group()
             else:

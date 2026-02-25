@@ -30,7 +30,7 @@ def entry_node(state: State) -> Dict:
     # and we already sent the greeting, they need a re-prompt.
     if greeting_sent and len(messages) > 1:
         last_msg = messages[-1]
-        last_type = last_msg.get("type") if isinstance(last_msg, dict) else "human"
+        last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
         
         print(f"DEBUG ENTRY_NODE last_type={last_type}")
         
@@ -96,6 +96,11 @@ def support_router(state: State) -> str:
             if step == "otp":
                 return "auth_verify_otp"
             return "auth_collect_contact"
+        
+        # They are authenticated, but check if we already proved they aren't in the DB
+        if state.get("in_db") is False:
+            return "lookup_failure_node"
+            
         return "service_status_check"
         
     elif support_type == "sales":

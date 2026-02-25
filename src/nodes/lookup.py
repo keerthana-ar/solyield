@@ -1,6 +1,7 @@
 from src.state import State
 from src.utils.data_loader import load_customer_by_identifier
 from typing import Dict
+from langgraph.graph import END
 
 def customer_lookup(state: State) -> Dict:
     """
@@ -65,11 +66,9 @@ def post_auth_router(state: State) -> str:
         if in_db:
             return "service_status_check"
         else:
-            # If we just failed for the first time, wait for user choice (Try again / Continue)
-            # If retries is 1 and we are here, it means we just showed the buttons.
-            # We need to know the User's choice. 
-            # For simplicity in this deterministic graph, we'll check a flag or just END to wait for input.
-            return "lookup_failure_node"
+            if state.get("lookup_retry_choice"):
+                return "lookup_failure_node"
+            return END
     elif support_type == "sales":
         return "sales_start"
     
@@ -85,7 +84,7 @@ def lookup_failure_router(state: State) -> str:
     elif choice == "No, continue anyway":
         return "service_unregistered_start"
     
-    return "__end__"
+    return END
 
 def lookup_reset_for_retry(state: State) -> Dict:
     """
