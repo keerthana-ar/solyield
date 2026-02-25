@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # SunBun Solar Assistant (Week 1)
 
 A deterministic state-graph backend for a solar sales and service assistant, built with **LangGraph** and integrated with actual customer/site data.
@@ -77,5 +76,3 @@ graph TD
 ---
 **SunBun Solar Assistant** - *Empowering sustainable energy through intelligent assistance.*
 =======
-# solyield
->>>>>>> 75eb3a516fa33a82f23bb5b086f38a15c4604e84
