@@ -10,6 +10,18 @@ def customer_lookup(state: State) -> Dict:
     identifier = state.get("auth_identifier_value")
     customer_data = load_customer_by_identifier(identifier)
     
+    # If the user is somehow pushed here again, check if they replied to the buttons!
+    messages = state.get("messages", [])
+    if messages:
+        last_msg = messages[-1]
+        last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
+        if last_type == "human":
+            human_reply = last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg)
+            if "continue anyway" in human_reply.lower():
+                return {"lookup_retry_choice": "No, continue anyway"}
+            elif "try again" in human_reply.lower():
+                return {"lookup_retry_choice": "Try again"}
+                
     if customer_data:
         name = customer_data["customer_name"]
         location = customer_data["location"]
@@ -70,7 +82,12 @@ def post_auth_router(state: State) -> str:
                 return "lookup_failure_node"
             return END
     elif support_type == "sales":
-        return "sales_start"
+        if in_db:
+            return "sales_start"
+        else:
+            if state.get("lookup_retry_choice"):
+                return "lookup_failure_node"
+            return END
     
     return END
 
@@ -82,6 +99,8 @@ def lookup_failure_router(state: State) -> str:
     if choice == "Try again":
         return "lookup_reset_for_retry"
     elif choice == "No, continue anyway":
+        if state.get("support_type") == "sales":
+            return "sales_start"
         return "service_unregistered_start"
     
     return END

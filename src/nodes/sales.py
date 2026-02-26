@@ -40,8 +40,8 @@ def sales_start(state: State) -> Dict:
     
     if in_db is False:
         new_messages.append("We couldn’t find an existing SunBun system under your details. Let’s collect some information to prepare a customized solar proposal for you.")
-    
-    new_messages.append(f"Hi {customer_name}, how can we help with your solar plans today?")
+    else:
+        new_messages.append(f"Hi {customer_name}, how can we help with your solar plans today?")
         
     if in_db and has_proposals:
         new_messages.append("We see that we’ve previously shared one or more proposals with you.")
@@ -66,7 +66,7 @@ def sales_start(state: State) -> Dict:
         return {
             "messages": new_messages,
             "sales_review_choice": "Create new proposals",
-            "sales_step": "greeting"
+            "sales_step": "info_capture"
         }
 
 def sales_existing_router(state: State) -> str:
@@ -74,11 +74,27 @@ def sales_existing_router(state: State) -> str:
     Step 8.2: branch if customer has prior proposals.
     Router for the first sales turn if proposals exist.
     """
+    # If we already passed the greeting phase, relinquish control to the master router!
+    if state.get("sales_step") != "greeting":
+        return sales_router(state)
+        
     choice = state.get("sales_review_choice")
     if choice == "Review old proposals":
         return "sales_proposal_review"
     elif choice == "Create new proposals":
         return "sales_info_capture"
+        
+    # Check if they just replied to the greeting
+    messages = state.get("messages", [])
+    if messages:
+        last_msg = messages[-1]
+        last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
+        if last_type == "human":
+             content = last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg)
+             if "old" in content.lower() or "review" in content.lower():
+                 return "sales_proposal_review"
+             elif "new" in content.lower() or "create" in content.lower():
+                 return "sales_info_capture"
     
     # Wait for input
     return END
@@ -115,7 +131,7 @@ def sales_proposal_review(state: State) -> Dict:
     messages = ["Here are your past proposals:"]
     
     for p in proposals:
-        card = f"**Proposal:** {p.get('proposal_name')}\n**Price:** ${p.get('approx_price')}\n**Savings:** ${p.get('estimated_yearly_savings')}/yr\n**Date:** {p.get('date_created')}\n**Status:** {p.get('status')}"
+        card = f"**Proposal:** {p.get('proposal_name')}\n**Price:** ${p.get('approx_price')}\n**Savings:** ${p.get('estimated_yearly_savings')}/yr\n**Date:** {p.get('date_created')}\n**Status:** {p.get('status')}\n[View full proposal](#)"
         messages.append(card)
         
     messages.append({
@@ -149,6 +165,38 @@ def sales_info_capture(state: State) -> Dict:
         if last_type == "human":
             human_reply = last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg)
 
+    # 0. Name Capture (Unregistered)
+    in_db = state.get("in_db")
+    if in_db is False and not state.get("customer_name"):
+        if state.get("sales_step") == "name" and human_reply:
+             return {"customer_name": human_reply}
+             
+        if any(isinstance(m, str) and "provide your full name" in m.lower() for m in messages) or \
+           any(isinstance(m, dict) and "provide your full name" in str(m.get("content", "")).lower() for m in messages):
+            return {"sales_step": "name"}
+            
+        return {
+            "messages": ["Could you please provide your full name so we can personalize your proposal?"],
+            "sales_step": "name"
+        }
+
+    # 0.5 Contact Complement
+    if state.get("sales_contact_complement") is None:
+        auth_type = state.get("auth_identifier_type")
+        missing_type = "email address" if auth_type == "phone" else "phone number"
+        
+        if state.get("sales_step") == "contact_complement" and human_reply:
+             return {"sales_contact_complement": human_reply}
+             
+        if any(isinstance(m, str) and "provide your" in m.lower() for m in messages) or \
+           any(isinstance(m, dict) and "provide your" in str(m.get("content", "")).lower() for m in messages):
+            return {"sales_step": "contact_complement"}
+            
+        return {
+            "messages": [f"Could you please also provide your {missing_type} so we can reach out with the proposal?"],
+            "sales_step": "contact_complement"
+        }
+
     # 1. Postal Code & City
     if not state.get("sales_postal_code"):
         if state.get("sales_step") == "context" and human_reply:
@@ -160,7 +208,7 @@ def sales_info_capture(state: State) -> Dict:
             return {"sales_step": "context"}
             
         return {
-            "messages": ["Great! Let’s get some details for your new proposal.", "Please provide your postal code and city."],
+            "messages": ["Great! To prepare your new proposal, please provide your postal code and city."],
             "sales_step": "context"
         }
         
@@ -234,24 +282,42 @@ def sales_info_capture(state: State) -> Dict:
             "sales_step": "design_count"
         }
     
-    # 4b. Brand / Tier
-    if state.get("sales_brand_preferences") is None and state.get("sales_budget_tiers") is None:
-        if state.get("sales_step") == "design_prefs" and human_reply:
-             # Fast parsing: For Phase 1 we just store their text directly in the array
-             return {"sales_brand_preferences": [human_reply], "sales_step": "generating"}
+    # 4b. Brand Preferences
+    if state.get("sales_brand_preferences") is None:
+        if state.get("sales_step") == "design_brand" and human_reply:
+             return {"sales_brand_preferences": [human_reply]}
 
         if any(isinstance(m, str) and "brand preferences" in m for m in messages) or \
            any(isinstance(m, dict) and "brand preferences" in str(m.get("content", "")) for m in messages):
-            return {"sales_step": "design_prefs"}
+            return {"sales_step": "design_brand"}
+            
+        return {
+            "messages": ["Do you have any brand preferences for Inverters (Enphase, SolarEdge, Sungrow, GoodWe) or Modules (Jinko, Trina, Waaree)?"],
+            "sales_step": "design_brand"
+        }
+        
+    # 4c. Budget Tier
+    if state.get("sales_budget_tiers") is None:
+        # Check if they had distinct brand preferences, skip tier if true
+        brand_prefs = state.get("sales_brand_preferences", [])
+        brand_str = brand_prefs[0] if brand_prefs else ""
+        if brand_str and brand_str.lower() not in ["no", "none", "nope", "n/a"]:
+            return {"sales_budget_tiers": ["Standard"], "sales_step": "generating"}
+
+        if state.get("sales_step") == "design_tier" and human_reply:
+             return {"sales_budget_tiers": [human_reply], "sales_step": "generating"}
+
+        if any(isinstance(m, str) and "prefer Premium, Standard" in m for m in messages) or \
+           any(isinstance(m, dict) and "prefer Premium, Standard" in str(m.get("content", "")) for m in messages):
+            return {"sales_step": "design_tier"}
             
         return {
             "messages": [
-                "Do you have any brand preferences for Inverters (Enphase, SolarEdge, Sungrow, GoodWe) or Modules (Jinko, Trina, Waaree)?",
                 {
                     "type": "ai",
-                    "content": "Would you prefer Premium, Standard, or Budget options?",
+                    "content": "Would you prefer Premium, Standard, or Budget options? You can pick more than one.",
                     "additional_kwargs": {
-                        "options": [
+                        "checkboxes": [
                             {"label": "Premium", "value": "Premium"},
                             {"label": "Standard", "value": "Standard"},
                             {"label": "Budget", "value": "Budget"}
@@ -259,7 +325,7 @@ def sales_info_capture(state: State) -> Dict:
                     }
                 }
             ],
-            "sales_step": "design_prefs"
+            "sales_step": "design_tier"
         }
 
     # 5. Transition to Generation
@@ -306,7 +372,7 @@ def sales_proposal_generate(state: State) -> Dict:
     
     messages = ["I've designed these options for you:"]
     for p in selected:
-        messages.append(f"{p.get('proposal_name')} | Expected Savings: ${p.get('estimated_yearly_savings')}/yr | Price: ${p.get('approx_price')}")
+        messages.append(f"**{p.get('proposal_name')}**\nExpected Savings: ${p.get('estimated_yearly_savings')}/yr | Approx Price: ${p.get('approx_price')}\n[View full proposal](#)")
         
     messages.append({
         "type": "ai",
@@ -327,7 +393,27 @@ def sales_proposal_confirm(state: State) -> Dict:
     Step 8.2 & 6.4: store chosen proposal and handoff to Inside Sales.
     """
     if state.get("sales_step") == "confirm":
-        # We already processed
+        # We are pausing for the call/chat payload from the user
+        messages = state.get("messages", [])
+        if messages:
+            last_msg = messages[-1]
+            last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
+            if last_type == "human":
+                content = last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg)
+                cust_name = state.get("customer_name") or "customer"
+                prop_name = state.get("chosen_proposal_name") or "proposal"
+                
+                final_msgs = []
+                if "call" in content.lower():
+                    final_msgs.append(f"CRM Task created: 'Call {cust_name} about {prop_name} within 1 hour.'")
+                elif "chat" in content.lower():
+                    final_msgs.append("CRM Opportunity created: Opening live chat with Inside Sales...")
+                    
+                final_msgs.append("Thank you for considering SunBun. We’ll be in touch shortly.")
+                return {
+                    "messages": final_msgs,
+                    "sales_step": "handoff"
+                }
         return {}
         
     agent_online = check_agent_availability("sales")
@@ -364,9 +450,23 @@ def sales_router(state: State) -> str:
     step = state.get("sales_step")
     
     if step == "greeting":
-        return sales_existing_router(state)
+        # Check if the human just clicked one of the greeting buttons
+        messages = state.get("messages", [])
+        if messages:
+            last_msg = messages[-1]
+            last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
+            if last_type == "human":
+                return sales_existing_router(state)
+        return END
         
     if step == "review":
+        # Check if the human just replied
+        messages = state.get("messages", [])
+        if messages:
+            last_msg = messages[-1]
+            last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
+            if last_type == "human":
+                return "sales_proposal_review"
         return END
         
     if step == "review_complete":
@@ -384,26 +484,47 @@ def sales_router(state: State) -> str:
     if step == "options":
         if state.get("chosen_proposal_id"):
             return "sales_proposal_confirm"
+            
+        # Check if the human just clicked a proposal button
+        messages = state.get("messages", [])
+        if messages:
+            last_msg = messages[-1]
+            last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
+            if last_type == "human":
+                return "sales_proposal_generate"
+                
         return END
 
     if step == "confirm":
+        # Check if the human just replied with Call/Chat
+        messages = state.get("messages", [])
+        if messages:
+            last_msg = messages[-1]
+            last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
+            if last_type == "human":
+                return "sales_proposal_confirm"
+        return END
+
+    if step == "handoff":
         return END
 
     # Input capture steps should pause for user input
-    input_steps = ["context", "segment", "usage_bill", "usage_increase", "design_count", "design_prefs"]
+    input_steps = ["name", "contact_complement", "context", "segment", "usage_bill", "usage_increase", "design_count", "design_brand", "design_tier"]
     if step in input_steps:
-        # If not captured yet, END to pause the graph for human message
-        # If it was captured just now, the router needs to loop back to info_capture!
-        if step == "context" and state.get("sales_postal_code"): return "sales_info_capture"
-        if step == "segment" and state.get("sales_segment_choice"): return "sales_info_capture"
-        if step == "usage_bill" and state.get("sales_monthly_bill"): return "sales_info_capture"
-        if step == "usage_increase" and state.get("sales_consumption_increase"): return "sales_info_capture"
-        if step == "design_count" and state.get("sales_solution_count"): return "sales_info_capture"
-        
-        # We need careful checks so it doesn't double run
-        if step == "design_prefs" and (state.get("sales_brand_preferences") or state.get("sales_budget_tiers")): 
-             return "sales_info_capture"
-        
+        # Check if the human just replied
+        messages = state.get("messages", [])
+        human_just_replied = False
+        if messages:
+            last_msg = messages[-1]
+            last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
+            if last_type == "human":
+                human_just_replied = True
+                
+        # If the human replied, we MUST route to info_capture so it can extract the data!
+        if human_just_replied:
+            return "sales_info_capture"
+            
+        # If not, it means we just printed the question, so END to pause for input
         return END
         
     # Default to capture turns if not completed

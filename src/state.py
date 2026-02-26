@@ -60,6 +60,7 @@ class State(TypedDict):
     chosen_proposal_name: Optional[str]
     
     # New Sales Capture Fields (6.3)
+    sales_contact_complement: Optional[str]
     sales_postal_code: Optional[str]
     sales_city: Optional[str]
     sales_segment_choice: Optional[Literal["Residential", "Commercial", "Industrial"]]

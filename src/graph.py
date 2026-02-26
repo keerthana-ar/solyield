@@ -97,6 +97,7 @@ def create_graph():
     workflow.add_conditional_edges("lookup_failure_node", lookup_failure_router, {
         "lookup_reset_for_retry": "lookup_reset_for_retry",
         "service_unregistered_start": "service_unregistered_start",
+        "sales_start": "sales_start",
         "__end__": END
     })
 
@@ -130,6 +131,7 @@ def create_graph():
     
     # Unregistered path sequence merges directly into standard escalation
     workflow.add_conditional_edges("service_unregistered_start", unregistered_system_router, {
+        "service_unregistered_start": "service_unregistered_start",
         "service_issue_capture": "service_issue_capture",
         "__end__": END
     })
@@ -143,10 +145,13 @@ def create_graph():
     workflow.add_conditional_edges("sales_start", sales_router, {
         "sales_proposal_review": "sales_proposal_review",
         "sales_info_capture": "sales_info_capture",
+        "sales_proposal_generate": "sales_proposal_generate",
+        "sales_proposal_confirm": "sales_proposal_confirm",
         "__end__": END
     })
     
     workflow.add_conditional_edges("sales_proposal_review", sales_router, {
+        "sales_proposal_review": "sales_proposal_review",
         "sales_info_capture": "sales_info_capture",
         "sales_proposal_confirm": "sales_proposal_confirm",
         "__end__": END
@@ -159,11 +164,15 @@ def create_graph():
     })
     
     workflow.add_conditional_edges("sales_proposal_generate", sales_router, {
+        "sales_proposal_generate": "sales_proposal_generate",
         "sales_proposal_confirm": "sales_proposal_confirm",
         "__end__": END
     })
     
-    workflow.add_edge("sales_proposal_confirm", END)
+    workflow.add_conditional_edges("sales_proposal_confirm", sales_router, {
+        "sales_proposal_confirm": "sales_proposal_confirm",
+        "__end__": END
+    })
 
     return workflow.compile()
 

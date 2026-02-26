@@ -1,3 +1,5 @@
+"use client";
+import { useState } from "react";
 import { parsePartialJson } from "@langchain/core/output_parsers";
 import { useStreamContext } from "@/providers/Stream";
 import { AIMessage, Checkpoint, Message } from "@langchain/langgraph-sdk";
@@ -64,6 +66,26 @@ function parseAnthropicStreamedToolCalls(
       type: "tool_call",
     };
   });
+}
+
+function CheckboxGroup({ options, onSubmit, disabled }: { options: any[], onSubmit: (val: string) => void, disabled: boolean }) {
+  const [selected, setSelected] = useState<string[]>([]);
+
+  const toggle = (val: string) => {
+    setSelected(prev => prev.includes(val) ? prev.filter(p => p !== val) : [...prev, val]);
+  }
+
+  return (
+    <div className="flex flex-col gap-2 mt-2 mb-4 w-full">
+      {options.map(opt => (
+        <label key={opt.value} className="flex items-center gap-2 cursor-pointer p-2 border border-gray-300 rounded-md hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800">
+          <input type="checkbox" className="w-4 h-4 cursor-pointer" checked={selected.includes(opt.value)} onChange={() => toggle(opt.value)} disabled={disabled} />
+          <span className="break-words font-medium text-sm">{opt.label}</span>
+        </label>
+      ))}
+      <Button variant="default" disabled={disabled || selected.length === 0} onClick={() => onSubmit(selected.join(", "))} className="mt-2 w-full">Confirm Selection</Button>
+    </div>
+  )
 }
 
 export function AssistantMessage({
@@ -145,9 +167,17 @@ export function AssistantMessage({
             </div>
           )}
 
-          {message?.additional_kwargs?.options && (
-            <div className="flex flex-col gap-2 mt-2 mb-4 w-full">
-              {message.additional_kwargs.options.map((opt: any) => (
+          {(message as AIMessage)?.additional_kwargs?.checkboxes ? (
+             <CheckboxGroup
+                options={(message as AIMessage).additional_kwargs!.checkboxes as any[]}
+                onSubmit={handleOptionClick}
+                disabled={isLoading}
+             />
+          ) : null}
+
+          {(message as AIMessage)?.additional_kwargs?.options ? (
+             <div className="flex flex-col gap-2 mt-2 mb-4 w-full">
+               {((message as AIMessage).additional_kwargs!.options as any[]).map((opt: any) => (
                 <Button
                   key={opt.value}
                   variant="outline"
@@ -159,7 +189,7 @@ export function AssistantMessage({
                 </Button>
               ))}
             </div>
-          )}
+          ) : null}
 
           {!hideToolCalls && (
             <>

@@ -32,10 +32,17 @@ def entry_node(state: State) -> Dict:
         last_msg = messages[-1]
         last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
         
-        print(f"DEBUG ENTRY_NODE last_type={last_type}")
-        
-        # If the last message was from the human, they haven't picked a valid option
         if last_type == "human":
+            content = last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg)
+            c_lower = content.lower()
+            
+            # Check for hidden text intent
+            if "sale" in c_lower or "buy" in c_lower:
+                return {"support_type": "sales", "auth_step": "identifier"}
+            elif "service" in c_lower or "fix" in c_lower or "support" in c_lower:
+                return {"support_type": "service", "auth_step": "identifier"}
+                
+            # Otherwise, render the fallback menu
             return {
                 "messages": [
                     {
@@ -50,6 +57,7 @@ def entry_node(state: State) -> Dict:
                     }
                 ]
             }
+        # If it wasn't a human message, do nothing
         return {}
 
     name = state.get("customer_name") or "there"
@@ -81,34 +89,42 @@ def support_router(state: State) -> str:
         messages = state.get("messages", [])
         if messages:
             last_msg = messages[-1]
-            content = ""
-            if isinstance(last_msg, str):
-                content = last_msg
-            elif isinstance(last_msg, dict):
-                content = last_msg.get("content", "") or last_msg.get("text", "")
-            
-            if "Sales Support" in content:
-                pass
+            last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
+            if last_type == "human":
+                 content = last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg)
+                 c_lower = content.lower()
+                 if "sale" in c_lower or "buy" in c_lower:
+                     support_type = "sales"
+                 elif "service" in c_lower or "fix" in c_lower or "support" in c_lower:
+                     support_type = "service"
+                     
+        if not support_type:
+            return "__end__" # Bounce back to entry_node for the menu
     
     if support_type == "service":
+        # Check if we already proved they aren't in the DB (unregistered bypass)
+        if state.get("in_db") is False:
+            return "lookup_failure_node"
+
         if not state.get("auth_verified"):
             step = state.get("auth_step")
             if step == "otp":
                 return "auth_verify_otp"
             return "auth_collect_contact"
-        
-        # They are authenticated, but check if we already proved they aren't in the DB
-        if state.get("in_db") is False:
-            return "lookup_failure_node"
             
         return "service_status_check"
         
     elif support_type == "sales":
+        # If they explicitly chose to continue unregistered (in_db is False), bypass auth loop!
+        if state.get("in_db") is False:
+            return "sales_start"
+
         if not state.get("auth_verified"):
             step = state.get("auth_step")
             if step == "otp":
                 return "auth_verify_otp"
             return "auth_collect_contact"
+            
         return "sales_start"
     
     return "__end__"

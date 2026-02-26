@@ -327,32 +327,50 @@ def service_nps_and_close(state: State) -> Dict:
 def service_unregistered_start(state: State) -> Dict:
     """
     Step 5.2: Non-SunBun or unregistered system path.
-    Prompt for system and installer information.
+    Prompt for system and installer information progressively.
     """
-    if state.get("unregistered_system_info"):
-        return {}
-
     messages = state.get("messages", [])
-    if state.get("service_step") == "system_info" and messages:
+    human_reply = ""
+    if messages:
         last_msg = messages[-1]
         last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
         if last_type == "human":
-            content = last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg)
-            if "continue" not in content.lower():
-                return {"unregistered_system_info": content}
+            human_reply = last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg)
 
-    # Prevent re-prompting
-    if any(isinstance(m, str) and "details about your setup" in m for m in messages) or \
-       any(isinstance(m, dict) and "details about your setup" in str(m.get("content", "")) for m in messages):
-        return {}
-        
-    return {
-        "messages": [
-            "We can still help, but we’ll need a few details about your setup.",
-            "Approximate system size (kWp)",
-            "Inverter brand/model",
-            "Year of installation",
-            {
+    # 1. System Size
+    if not state.get("unregistered_system_size"):
+        if state.get("service_step") == "system_size" and human_reply:
+             return {"unregistered_system_size": human_reply}
+        return {
+            "messages": ["We can still help, but we’ll need a few details about your setup.", "Approximate system size (kWp)"],
+            "service_step": "system_size"
+        }
+
+    # 2. Inverter brand/model
+    if not state.get("unregistered_inverter"):
+        if state.get("service_step") == "inverter" and human_reply:
+             return {"unregistered_inverter": human_reply}
+        return {
+            "messages": ["Inverter brand/model"],
+            "service_step": "inverter"
+        }
+
+    # 3. Year of installation
+    if not state.get("unregistered_year"):
+        if state.get("service_step") == "year" and human_reply:
+             return {"unregistered_year": human_reply}
+        return {
+            "messages": ["Year of installation"],
+            "service_step": "year"
+        }
+
+    # 4. Online Monitoring
+    if state.get("unregistered_online") is None:
+        if state.get("service_step") == "online" and human_reply:
+             val = True if "yes" in human_reply.lower() else False
+             return {"unregistered_online": val}
+        return {
+            "messages": [{
                 "type": "ai",
                 "content": "Is online monitoring active?",
                 "additional_kwargs": {
@@ -361,18 +379,36 @@ def service_unregistered_start(state: State) -> Dict:
                         {"label": "No", "value": "No"}
                     ]
                 }
-            },
-            "Who installed your system? (Enter name or 'Don’t remember')"
-        ],
-        "service_step": "system_info"
-    }
+            }],
+            "service_step": "online"
+        }
+
+    # 5. Installer
+    if not state.get("unregistered_installer"):
+        if state.get("service_step") == "installer" and human_reply:
+             return {"unregistered_installer": human_reply, "unregistered_system_info": "captured"}
+        return {
+            "messages": ["Who installed your system? (Enter name or 'Don’t remember')"],
+            "service_step": "installer"
+        }
+
+    return {}
 
 def unregistered_system_router(state: State) -> str:
     """
-    Route after system info is collected.
+    Route after system info is collected progressively.
     """
-    if state.get("unregistered_system_info"):
+    if state.get("unregistered_system_info") == "captured":
         return "service_issue_capture"
+
+    # We need to wait for input unless the human just replied
+    messages = state.get("messages", [])
+    if messages:
+        last_msg = messages[-1]
+        last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
+        if last_type == "human":
+            return "service_unregistered_start"
+            
     return END
 
 # Removing redundant unregistered issue nodes since we mapped them to the central issue capture flow
