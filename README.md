@@ -31,14 +31,10 @@ graph TD
 ```
 
 ## 📸 Screenshots
-### 1. Service Support Flow (Issue Detection)
-![Service Flow Placeholder](https://via.placeholder.com/800x400?text=Service+Status+Check+-+Detailed+Issue+Detection)
+<img width="419" height="909" alt="Screenshot 2026-02-26 200726" src="https://github.com/user-attachments/assets/7920d92b-20d2-4dd1-b319-9ce4277b8bb2" />
 
-### 2. Unregistered System Capture
-![Unregistered Flow Placeholder](https://via.placeholder.com/800x400?text=Step+5+Unregistered+System+Information+Collection)
+<img width="367" height="443" alt="image" src="https://github.com/user-attachments/assets/08132d2c-e253-48e4-aa2f-d7440df47a41" />
 
-### 3. Sales Support & Proposal Comparison
-![Sales Flow Placeholder](https://via.placeholder.com/800x400?text=Step+6+Solar+Proposal+Cards)
 
 ## 🎥 Video Walkthrough
 [![SunBun Solar Assistant Walkthrough](https://img.shields.io/badge/Video-Watch%20Walkthrough-red?style=for-the-badge&logo=youtube)](https://example.com/sunbun-video)
