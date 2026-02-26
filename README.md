@@ -31,13 +31,17 @@ graph TD
 ```
 
 ## 📸 Screenshots
-<img width="419" height="909" alt="Screenshot 2026-02-26 200726" src="https://github.com/user-attachments/assets/7920d92b-20d2-4dd1-b319-9ce4277b8bb2" />
-
-<img width="367" height="443" alt="image" src="https://github.com/user-attachments/assets/08132d2c-e253-48e4-aa2f-d7440df47a41" />
-
 <img width="592" height="906" alt="image" src="https://github.com/user-attachments/assets/daabb249-2245-4ad6-8b03-4053beefb183" />
 
 <img width="641" height="902" alt="image" src="https://github.com/user-attachments/assets/b48474d8-2afb-4506-b9ca-39623af90cd9" />
+
+<img width="621" height="908" alt="image" src="https://github.com/user-attachments/assets/b510ba46-df4b-4ef6-8288-c6a587dc32a5" />
+
+<img width="578" height="908" alt="image" src="https://github.com/user-attachments/assets/9538b3f8-e925-4978-be04-5c71ca9b3881" />
+
+<img width="558" height="891" alt="image" src="https://github.com/user-attachments/assets/9c9e6374-da2b-4d72-a56e-a46a317d403f" />
+
+<img width="587" height="679" alt="image" src="https://github.com/user-attachments/assets/c77af6eb-5a3c-4308-80e3-43b581a00c51" />
 
 
 
