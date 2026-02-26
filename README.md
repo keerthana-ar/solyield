@@ -35,6 +35,11 @@ graph TD
 
 <img width="367" height="443" alt="image" src="https://github.com/user-attachments/assets/08132d2c-e253-48e4-aa2f-d7440df47a41" />
 
+<img width="592" height="906" alt="image" src="https://github.com/user-attachments/assets/daabb249-2245-4ad6-8b03-4053beefb183" />
+
+<img width="641" height="902" alt="image" src="https://github.com/user-attachments/assets/b48474d8-2afb-4506-b9ca-39623af90cd9" />
+
+
 
 ## 🎥 Video Walkthrough
 [![SunBun Solar Assistant Walkthrough](https://img.shields.io/badge/Video-Watch%20Walkthrough-red?style=for-the-badge&logo=youtube)](https://example.com/sunbun-video)
