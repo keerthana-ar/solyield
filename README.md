@@ -21,10 +21,9 @@ The FastAPI layer is architected to support standard Agent Protocol endpoints, e
 ### 4. Optimized In-Memory Persistence
 Using `MemorySaver`, the assistant handles multi-turn state transitions with ultra-low latency, making it perfect for high-speed hackathon demonstrations.
 
-## 📸 Screenshots
+## 📸 Demo Video
 ### Service & Sales Flows
-<video controls src="20260320-1749-01.2830612.mp4" title="Title"></video>
-<video controls src="20260320-1751-09.8023672.mp4" title="Title"></video>
+Please download and view the .mp4 videos in the root folder. Couldn't attach it in the readme file due to large size.
 
 ## 🛠️ Running the Application Locally
 
