@@ -1,14 +1,15 @@
 from typing import TypedDict, Literal, Optional, List, Dict, Annotated
 from operator import add
+from langgraph.graph.message import add_messages
+from langchain_core.messages import AnyMessage
 
 class State(TypedDict):
     # Session tracking
     session_id: str
     user_role: Literal["agent", "customer", "service_executive", "sales_executive", None]
     
-    # Routing & Flow
-    support_type: Literal["sales", "service", None]
-    messages: Annotated[List[Dict | str], add]
+    messages: Annotated[list, add_messages]
+    support_type: Optional[Literal["sales", "service"]]
     
     # Authentication
     auth_verified: bool
@@ -47,14 +48,14 @@ class State(TypedDict):
     photos: List[str]
     ticket_id: Optional[str]
     nps_score: Optional[int]
-    service_step: Optional[Literal["system_info", "issue_info", None]] # Added this
+    service_step: Optional[Literal["system_info", "system_size", "inverter", "year", "online", "installer", "issue_info", "nps", "feedback", None]]
     service_resolution_status: Literal["happy", "unhappy", None]
     
     # Sales Information
     sales_profile: Optional[Dict]
     proposals: List[Dict]
     chosen_proposal_id: Optional[str]
-    sales_step: Literal["greeting", "review", "context", "segment", "usage", "design", "options", "confirm", None]
+    sales_step: Literal["greeting", "review", "review_complete", "name", "contact_complement", "context", "segment", "usage_bill", "usage_increase", "design_count", "design_brand", "design_tier", "generating", "options", "agent_feedback", "feedback_reviewed", "proposal_share", "shared", "confirm", "handoff", None]
     sales_review_choice: Optional[Literal["Review old proposals", "Create new proposals"]]
     sales_review_result: Optional[Literal["Select a proposal", "Generate new options"]]
     chosen_proposal_name: Optional[str]
@@ -72,4 +73,4 @@ class State(TypedDict):
     
     # Handoff
     representative_available: Optional[bool]
-    handoff_type: Literal["call", "chat", None]
+    handoff_type: Optional[Literal["call", "chat", "ticket"]]

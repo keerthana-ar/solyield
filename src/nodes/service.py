@@ -1,8 +1,17 @@
+from langchain_core.messages import AIMessage, HumanMessage
 from src.state import State
 from src.utils.data_loader import load_site_by_id, load_metrics_by_site, check_agent_availability
 from typing import Dict, List
 from langgraph.graph import END
 import uuid
+
+def _extract_msg_content(m: object) -> str:
+    """Best-effort content extraction for both dict messages and LangChain message objects."""
+    if isinstance(m, str):
+        return m
+    if isinstance(m, dict):
+        return str(m.get("content") or m.get("text") or "")
+    return str(getattr(m, "content", "") or "")
 
 def service_status_check(state: State) -> Dict:
     """
@@ -18,10 +27,10 @@ def service_status_check(state: State) -> Dict:
     messages = state.get("messages", [])
     
     # Check if we've already done this check to avoid duplicate messages on re-entry
-    if any(isinstance(m, dict) and m.get("content") and "Let me quickly check" in m.get("content") for m in messages):
+    if any("Let me quickly check" in _extract_msg_content(m) for m in messages):
         return {}
     
-    new_messages = ["Let me quickly check the current status of your solar system in our monitoring platform."]
+    new_messages = [{"type": "ai", "content": "Let me quickly check the current status of your solar system in our monitoring platform."}]
     
     issue_flag = str(site_data.get("issue_flag")).lower() == "true"
     
@@ -29,9 +38,9 @@ def service_status_check(state: State) -> Dict:
         issue_text = site_data.get("issue_text")
         action_text = site_data.get("recommended_action_text")
         new_messages.extend([
-            "We are currently seeing an issue on your system.",
-            f"Issue: {issue_text}.",
-            f"Recommended action: {action_text}."
+            {"type": "ai", "content": "We are currently seeing an issue on your system."},
+            {"type": "ai", "content": f"Issue: {issue_text}."},
+            {"type": "ai", "content": f"Recommended action: {action_text}."}
         ])
         # Placeholder for ETA if present in a real scenario
         return {
@@ -58,13 +67,17 @@ def service_status_check(state: State) -> Dict:
             analysis_text = "Your system does not show any active faults and no recent monitoring data is available."
         else:
             avg_cloudiness = sum(m.get("cloudiness_percentage", 0) for m in metrics) / len(metrics)
-            total_prod = sum(m.get("production_kwh", 0) for m in metrics) # This is weekly total
+            total_prod = sum(m.get("production_kwh", 0) for m in metrics)
+            avg_perf = sum(m.get("performance_score", 0) for m in metrics) / len(metrics)
             
-            analysis_text = f"Your system is performing normally. Weekly production: {total_prod:.1f} kWh. Average cloudiness: {avg_cloudiness:.1f}%."
-            if avg_cloudiness > 50:
-                 analysis_text += " Higher cloudiness might affect production this week."
+            if avg_cloudiness > 60:
+                 analysis_text = f"Your system does not show any active faults. However, the last week has been unusually cloudy at your location, which is likely why your production has been lower than normal. It should auto-correct as weather improves."
+            elif avg_perf > 90:
+                 analysis_text = f"Your system appears to be performing normally. Last week’s total production was {total_prod:.1f} kWh."
+            else:
+                 analysis_text = "We see a slight underperformance trend, but nothing critical yet. We’ll continue monitoring it."
         
-        new_messages.append(analysis_text)
+        new_messages.append({"type": "ai", "content": analysis_text})
         return {
             "issue_flag": False,
             "issue_text": analysis_text,
@@ -95,13 +108,15 @@ def service_resolution_router(state: State) -> str:
         messages = state.get("messages", [])
         if messages:
             last_msg = messages[-1]
-            last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
+            last_type = getattr(last_msg, "type", last_msg.get("type") if isinstance(last_msg, dict) else "ai")
             
             if last_type == "human":
-                content = last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg)
-                if "happy" in content.lower():
+                content = getattr(last_msg, "content", last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg))
+                content = str(content).lower()
+                # Fix 13: Standardize on exact values for button clicks
+                if "happy" == content:
                     status = "happy"
-                elif "help" in content.lower() or "still need" in content.lower():
+                elif "unhappy" == content:
                     status = "unhappy"
                     
     if status == "happy":
@@ -109,7 +124,7 @@ def service_resolution_router(state: State) -> str:
     elif status == "unhappy":
         return "service_issue_capture"
         
-    return END
+    return "__end__"
 
 def service_issue_capture(state: State) -> Dict:
     """
@@ -123,23 +138,24 @@ def service_issue_capture(state: State) -> Dict:
     messages = state.get("messages", [])
     if messages:
         last_msg = messages[-1]
-        last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
+        last_type = getattr(last_msg, "type", last_msg.get("type") if isinstance(last_msg, dict) else "ai")
         if last_type == "human":
-            content = last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg)
+            content = getattr(last_msg, "content", last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg))
+            content_lower = str(content).lower()
             categories = ["Production Issue", "System Not Working", "Communication Loss", "Battery Failure", "Inverter Failure", "Others"]
             for cat in categories:
-                if cat.lower() in content.lower():
+                if cat.lower() in content_lower:
                     return {"selected_issue": cat}
                     
     # Prevent double-prompting
-    if any(isinstance(m, dict) and "Please select the category" in str(m.get("content", "")) for m in messages):
+    if any("Please select the category" in _extract_msg_content(m) for m in messages):
         return {}
                     
     # If app.py hasn't set it yet, we prompt the user
     return {
         "service_resolution_status": "unhappy",
         "messages": [
-            "Sorry to hear that. Let’s understand the issue in a bit more detail.",
+            {"type": "ai", "content": "Sorry to hear that. Let’s understand the issue in a bit more detail."},
             {
                 "type": "ai",
                 "content": "Please select the category that best describes your issue:",
@@ -163,7 +179,7 @@ def issue_capture_router(state: State) -> str:
     """
     if state.get("selected_issue"):
         return "service_issue_context_collect"
-    return END
+    return "__end__"
 
 def service_issue_context_collect(state: State) -> Dict:
     """
@@ -176,36 +192,35 @@ def service_issue_context_collect(state: State) -> Dict:
     messages = state.get("messages", [])
     if messages:
         last_msg = messages[-1]
-        last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
+        last_type = getattr(last_msg, "type", last_msg.get("type") if isinstance(last_msg, dict) else "ai")
         if last_type == "human":
-            content = last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg)
+            content = getattr(last_msg, "content", last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg))
+            content_lower = str(content).lower()
             selected_issue = state.get("selected_issue", "").lower()
             
             # Make sure it's not the button click itself
-            if content.lower() != selected_issue and "still need help" not in content.lower() and "continue" not in content.lower():
+            if content_lower != selected_issue and "still need help" not in content_lower and "continue" not in content_lower():
                 prompt_str = "Please describe the issue"
-                if any(isinstance(m, str) and prompt_str in m for m in messages) or \
-                   any(isinstance(m, dict) and prompt_str in str(m.get("content", "")) for m in messages):
+                if any(prompt_str in _extract_msg_content(m) for m in messages):
                     return {"description": content}
                 
     # Prevent double-prompting
     prompt_str = "Please describe the issue"
-    if any(isinstance(m, str) and prompt_str in m for m in messages) or \
-       any(isinstance(m, dict) and prompt_str in str(m.get("content", "")) for m in messages):
+    if any(prompt_str in _extract_msg_content(m) for m in messages):
         return {}
                 
     # If we haven't prompted yet, do it
     return {
         "messages": [
-            "Please describe the issue in your own words.",
-            "If possible, please upload photos or screenshots that show what you’re seeing (inverter screen, app screenshots, physical damage, etc.)."
+            {"type": "ai", "content": "Please describe the issue in your own words."},
+            {"type": "ai", "content": "If possible, please upload photos or screenshots that show what you’re seeing (inverter screen, app screenshots, physical damage, etc.)."}
         ]
     }
 
 def issue_context_router(state: State) -> str:
     if state.get("description"):
         return "service_availability_check"
-    return END
+    return "__end__"
 
 def service_availability_check(state: State) -> Dict:
     """
@@ -216,13 +231,24 @@ def service_availability_check(state: State) -> Dict:
     if state.get("handoff_type") is not None:
         return {}
         
-    # Check if we already asked
+    # Check if they just answered
     messages = state.get("messages", [])
-    if any(isinstance(m, dict) and "Would you like to start a live chat" in str(m.get("content")) for m in messages):
-        return {}
+    if messages:
+        last_msg = messages[-1]
+        last_type = getattr(last_msg, "type", last_msg.get("type") if isinstance(last_msg, dict) else "ai")
+        if last_type == "human":
+            content = getattr(last_msg, "content", last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg))
+            content = str(content).lower()
+            # If we already asked, process the answer
+            if any("Would you like to start a live chat" in _extract_msg_content(m) for m in messages):
+                if "yes" in content:
+                    return {"handoff_type": "chat"}
+                elif "no" in content or "ticket" in content:
+                    return {"handoff_type": "ticket"}
         
     online = check_agent_availability("service")
     if online:
+        # Fix 13: We'll extract message content later, but we need to prompt
         return {
             "representative_available": True,
             "messages": [
@@ -243,7 +269,7 @@ def service_availability_check(state: State) -> Dict:
             "representative_available": False,
             "handoff_type": "ticket", # No live chat possible
             "messages": [
-                 "Our service team is currently offline. I’ll create a ticket with all the details you’ve shared so we can follow up."
+                 {"type": "ai", "content": "Our service team is currently offline. I’ll create a ticket with all the details you’ve shared so we can follow up."}
             ]
         }
 
@@ -258,21 +284,22 @@ def availability_router(state: State) -> str:
         messages = state.get("messages", [])
         if messages:
             last_msg = messages[-1]
-            last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
+            last_type = getattr(last_msg, "type", last_msg.get("type") if isinstance(last_msg, dict) else "ai")
             if last_type == "human":
-                content = last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg)
-                if "yes" in content.lower():
-                    state["handoff_type"] = "chat"
+                content = getattr(last_msg, "content", last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg))
+                content = str(content).lower()
+                # Fix 4: Router must be pure. We rely on the node to have set the choice 
+                # or we check the message without mutating.
+                if "yes" in content:
                     return "service_live_chat_start"
-                elif "no" in content.lower() or "ticket" in content.lower():
-                    state["handoff_type"] = "ticket"
+                elif "no" in content or "ticket" in content:
                     return "service_ticket_create"
-        return END
+        return "__end__"
 
     if state.get("representative_available") is False:
         return "service_ticket_create"
         
-    return END
+    return "__end__"
 
 def service_live_chat_start(state: State) -> Dict:
     """
@@ -284,7 +311,7 @@ def service_live_chat_start(state: State) -> Dict:
     return {
         "ticket_id": f"TRANSFERRED-{uuid.uuid4().hex[:8].upper()}",
         "messages": [
-            "We are transferring you to a service executive with the full context of your issue. Please wait..."
+            {"type": "ai", "content": "We are transferring you to a service executive with the full context of your issue. Please wait..."}
         ]
     }
 
@@ -297,32 +324,76 @@ def service_ticket_create(state: State) -> Dict:
         return {}
         
     ticket_id = f"TICKET-{uuid.uuid4().hex[:8].upper()}"
-    
-    messages = []
-    messages.append(f"Your service ticket has been created. Ticket number: {ticket_id}. Our team will reach out to you shortly.")
-
     return {
         "ticket_id": ticket_id,
-        "messages": messages
+        "messages": [{"type": "ai", "content": f"Your service ticket has been created. Ticket number: {ticket_id}. Our team will reach out to you shortly."}]
     }
 
 def service_nps_and_close(state: State) -> Dict:
     """
     Handle NPS and close conversation.
-    Matches Step 4.2 requirements.
+    Matches Step 4.2 requirements (Interactive loop).
     """
-    if state.get("ticket_id"):
+    messages = state.get("messages", [])
+    if not messages:
         return {}
         
-    return {
-        "ticket_id": f"RESOLVED-{uuid.uuid4().hex[:8].upper()}",
-        "messages": [
-            "Great, we’ll log that your query has been resolved.",
-            "On a scale of 1 to 10, how satisfied are you with the support you received just now?",
-            "Anything else you’d like to share about your experience?",
-            "Thank you. Your feedback helps us improve. Have a great day!"
-        ]
-    }
+    last_msg = messages[-1]
+    if hasattr(last_msg, "type"):
+        l_type = last_msg.type
+        l_content = last_msg.content
+    else:
+        l_type = last_msg.get("type", "ai")
+        l_content = last_msg.get("content", "")
+
+    # 1. Start NPS if we haven't yet
+    if not state.get("service_step"):
+        return {
+            "messages": [
+                {"type": "ai", "content": "Great, we’ll log that your query has been resolved."},
+                {"type": "ai", "content": "On a scale of 1 to 10, how satisfied are you with the support you received just now?"}
+            ],
+            "service_step": "nps"
+        }
+
+    # If the last message was AI, we just asked a question, wait for human
+    if l_type == "ai":
+        return {}
+
+    # 2. Process NPS score (ULTRA PERMISSIVE FIX)
+    if state.get("service_step") == "nps":
+        # ULTRA PERMISSIVE: If we are here and the human replied, JUST GO TO NEXT STEP
+        # Extract number if possible for the state, but advance regardless
+        import re
+        match = re.search(r'\d+', str(l_content))
+        score = int(match.group()) if match else 10
+        
+        return {
+            "nps_score": score, 
+            "service_step": "feedback",
+            "messages": [{"type": "ai", "content": "Anything else you’d like to share about your experience?"}]
+        }
+
+    # 3. Process feedback and close
+    if state.get("service_step") == "feedback":
+        return {
+            "messages": [{"type": "ai", "content": "Thank you. Your feedback helps us improve. Have a great day!"}],
+            "service_step": "closed",
+            "ticket_id": f"RESOLVED-{uuid.uuid4().hex[:8].upper()}"
+        }
+
+    return {}
+
+def service_nps_router(state: State) -> str:
+    if state.get("service_step") == "closed":
+        return "__end__"
+    messages = state.get("messages", [])
+    if messages:
+        last_msg = messages[-1]
+        last_type = getattr(last_msg, "type", last_msg.get("type") if isinstance(last_msg, dict) else "ai")
+        if last_type == "human":
+            return "service_nps_and_close"
+    return "__end__"
 
 def service_unregistered_start(state: State) -> Dict:
     """
@@ -333,16 +404,19 @@ def service_unregistered_start(state: State) -> Dict:
     human_reply = ""
     if messages:
         last_msg = messages[-1]
-        last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
+        last_type = getattr(last_msg, "type", last_msg.get("type") if isinstance(last_msg, dict) else "ai")
         if last_type == "human":
-            human_reply = last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg)
+            human_reply = getattr(last_msg, "content", last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg))
 
     # 1. System Size
     if not state.get("unregistered_system_size"):
         if state.get("service_step") == "system_size" and human_reply:
              return {"unregistered_system_size": human_reply}
         return {
-            "messages": ["We can still help, but we’ll need a few details about your setup.", "Approximate system size (kWp)"],
+            "messages": [
+                {"type": "ai", "content": "We can still help, but we’ll need a few details about your setup."},
+                {"type": "ai", "content": "Approximate system size (kWp)"}
+            ],
             "service_step": "system_size"
         }
 
@@ -351,7 +425,7 @@ def service_unregistered_start(state: State) -> Dict:
         if state.get("service_step") == "inverter" and human_reply:
              return {"unregistered_inverter": human_reply}
         return {
-            "messages": ["Inverter brand/model"],
+            "messages": [{"type": "ai", "content": "Inverter brand/model"}],
             "service_step": "inverter"
         }
 
@@ -360,14 +434,14 @@ def service_unregistered_start(state: State) -> Dict:
         if state.get("service_step") == "year" and human_reply:
              return {"unregistered_year": human_reply}
         return {
-            "messages": ["Year of installation"],
+            "messages": [{"type": "ai", "content": "Year of installation"}],
             "service_step": "year"
         }
 
     # 4. Online Monitoring
     if state.get("unregistered_online") is None:
         if state.get("service_step") == "online" and human_reply:
-             val = True if "yes" in human_reply.lower() else False
+             val = True if "yes" in str(human_reply).lower() else False
              return {"unregistered_online": val}
         return {
             "messages": [{
@@ -388,7 +462,7 @@ def service_unregistered_start(state: State) -> Dict:
         if state.get("service_step") == "installer" and human_reply:
              return {"unregistered_installer": human_reply, "unregistered_system_info": "captured"}
         return {
-            "messages": ["Who installed your system? (Enter name or 'Don’t remember')"],
+            "messages": [{"type": "ai", "content": "Who installed your system? (Enter name or 'Don’t remember')"}],
             "service_step": "installer"
         }
 
@@ -405,10 +479,10 @@ def unregistered_system_router(state: State) -> str:
     messages = state.get("messages", [])
     if messages:
         last_msg = messages[-1]
-        last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
+        last_type = getattr(last_msg, "type", last_msg.get("type") if isinstance(last_msg, dict) else "ai")
         if last_type == "human":
             return "service_unregistered_start"
             
-    return END
+    return "__end__"
 
 # Removing redundant unregistered issue nodes since we mapped them to the central issue capture flow

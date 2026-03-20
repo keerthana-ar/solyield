@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: aegra-db
+    environment:
+      POSTGRES_USER: solyield_level_1
+      POSTGRES_PASSWORD: solyield_level_1_secret
+      POSTGRES_DB: solyield_level_1
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solyield_level_1 -d solyield_level_1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+
+  agent:
+    build: .
+    container_name: aegra-agent
+    env_file: .env
+    volumes:
+      - .:/app
+    working_dir: /app
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - POSTGRES_USER=solyield_level_1
+      - POSTGRES_PASSWORD=solyield_level_1_secret
+      - POSTGRES_DB=solyield_level_1
+      - POSTGRES_HOST=postgres
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy

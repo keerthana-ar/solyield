@@ -1,3 +1,4 @@
+from langchain_core.messages import AIMessage, HumanMessage
 from src.state import State
 from src.utils.data_loader import load_customer_by_identifier
 from typing import Dict
@@ -14,9 +15,9 @@ def customer_lookup(state: State) -> Dict:
     messages = state.get("messages", [])
     if messages:
         last_msg = messages[-1]
-        last_type = last_msg.get("type") if isinstance(last_msg, dict) else "ai"
+        last_type = getattr(last_msg, "type", last_msg.get("type") if isinstance(last_msg, dict) else "ai")
         if last_type == "human":
-            human_reply = last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg)
+            human_reply = getattr(last_msg, "content", last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg))
             if "continue anyway" in human_reply.lower():
                 return {"lookup_retry_choice": "No, continue anyway"}
             elif "try again" in human_reply.lower():
@@ -32,7 +33,7 @@ def customer_lookup(state: State) -> Dict:
             "location": location,
             "site_id": str(customer_data["site_id"]),
             "has_proposals": str(customer_data["has_proposals"]).lower() == "true",
-            "messages": [f"Hi {name} from {location}, welcome back to SunBun."]
+            "messages": [{"type": "ai", "content": f"Hi {name} from {location}, welcome back to SunBun."}]
         }
     else:
         # Step 5.1: First failed lookup
@@ -43,8 +44,8 @@ def customer_lookup(state: State) -> Dict:
                 "in_db": False,
                 "lookup_retries": 1,
                 "messages": [
-                    "We couldn’t find a system in our records matching this email/phone.",
-                    "If you are an existing SunBun customer, please make sure you’re using the same email or phone number that you used for your monitoring portal.",
+                    {"type": "ai", "content": "We couldn’t find a system in our records matching this email/phone."},
+                    {"type": "ai", "content": "If you are an existing SunBun customer, please make sure you’re using the same email or phone number that you used for your monitoring portal."},
                     {
                         "type": "ai",
                         "content": "Would you like to try a different email/phone?",
@@ -61,8 +62,9 @@ def customer_lookup(state: State) -> Dict:
             # Second fail - move to unregistered path
             return {
                 "in_db": False,
+                "lookup_retry_choice": "No, continue anyway", # Fix 10: Auto-transition
                 "messages": [
-                    "It looks like we don’t have your system in our records. We can still help, but we’ll need a few details about your setup."
+                    {"type": "ai", "content": "It looks like we don’t have your system in our records. We can still help, but we’ll need a few details about your setup."}
                 ]
             }
 
@@ -80,16 +82,16 @@ def post_auth_router(state: State) -> str:
         else:
             if state.get("lookup_retry_choice"):
                 return "lookup_failure_node"
-            return END
+            return "__end__" # Fix 5
     elif support_type == "sales":
         if in_db:
             return "sales_start"
         else:
             if state.get("lookup_retry_choice"):
                 return "lookup_failure_node"
-            return END
+            return "__end__" # Fix 5
     
-    return END
+    return "__end__" # Fix 5
 
 def lookup_failure_router(state: State) -> str:
     """
@@ -103,7 +105,7 @@ def lookup_failure_router(state: State) -> str:
             return "sales_start"
         return "service_unregistered_start"
     
-    return END
+    return "__end__"
 
 def lookup_reset_for_retry(state: State) -> Dict:
     """

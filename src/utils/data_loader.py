@@ -1,5 +1,20 @@
 import pandas as pd
 import os
+import numpy as np
+
+def clean_data(data):
+    """Recursively convert NumPy types to native Python types for JSON serialization."""
+    if isinstance(data, dict):
+        return {k: clean_data(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [clean_data(v) for v in data]
+    elif isinstance(data, (np.integer, np.floating)):
+        return data.item()
+    elif isinstance(data, np.bool_):
+        return bool(data)
+    elif pd.isna(data):
+        return None
+    return data
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "supportingData")
 
@@ -18,25 +33,25 @@ def load_customer_by_identifier(identifier: str):
         data = match.iloc[0].to_dict()
         # Rename 'name' to 'customer_name' for consistency with state
         data['customer_name'] = data.pop('name')
-        return data
+        return clean_data(data)
     return None
 
 def load_site_by_id(site_id: str):
     df = pd.read_csv(get_csv_path("sites.csv"))
     match = df[df['site_id'].astype(str) == str(site_id)]
     if not match.empty:
-        return match.iloc[0].to_dict()
+        return clean_data(match.iloc[0].to_dict())
     return None
 
 def load_metrics_by_site(site_id: str):
     df = pd.read_csv(get_csv_path("weekly_metrics.csv"))
     match = df[df['site_id'].astype(str) == str(site_id)]
-    return match.to_dict(orient="records")
+    return clean_data(match.to_dict(orient="records"))
 
 def load_proposals_by_customer(customer_id: str):
     df = pd.read_csv(get_csv_path("proposals.csv"))
     match = df[df['customer_id'].astype(str) == str(customer_id)]
-    return match.to_dict(orient="records")
+    return clean_data(match.to_dict(orient="records"))
 
 def verify_otp_sim(identifier: str, otp: str, channel: str):
     # Global bypass for testing purposes
@@ -58,8 +73,8 @@ def check_agent_availability(agent_type: str):
 
 def get_proposal_templates():
     df = pd.read_csv(get_csv_path("proposal_template.csv"))
-    return df.to_dict(orient="records")
+    return clean_data(df.to_dict(orient="records"))
 
 def load_site_issues():
     df = pd.read_csv(get_csv_path("site_issues.csv"))
-    return df.to_dict(orient="records")
+    return clean_data(df.to_dict(orient="records"))

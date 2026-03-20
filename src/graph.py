@@ -1,5 +1,6 @@
 from typing import TypedDict, Annotated, Dict
 from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.memory import MemorySaver
 from src.state import State
 from src.nodes.entry import entry_node, support_router
 from src.nodes.auth import (
@@ -9,14 +10,18 @@ from src.nodes.lookup import customer_lookup, post_auth_router, lookup_failure_r
 from src.nodes.service import (
     service_status_check, service_resolution_router, service_issue_capture, 
     service_issue_context_collect, service_ticket_create, service_nps_and_close, 
-    service_unregistered_start,
+    service_unregistered_start, service_nps_router,
     unregistered_system_router,
     issue_capture_router, issue_context_router,
     service_availability_check, availability_router, service_live_chat_start
 )
-from src.nodes.sales import sales_start, sales_proposal_generate, sales_proposal_confirm, sales_router, sales_proposal_review, sales_info_capture, sales_existing_router
+from src.nodes.sales import (
+    sales_start, sales_proposal_generate, sales_proposal_confirm, 
+    sales_router, sales_proposal_review, sales_info_capture, 
+    sales_existing_router, sales_agent_feedback, sales_proposal_share
+)
 
-def create_graph():
+def create_graph(checkpointer=None):
     workflow = StateGraph(State)
 
     # Entry & Routing
@@ -50,10 +55,11 @@ def create_graph():
 
     # Sales Flow
     workflow.add_node("sales_start", sales_start)
-    workflow.add_node("sales_existing_router", lambda x: x) # Compliance node
     workflow.add_node("sales_proposal_review", sales_proposal_review)
     workflow.add_node("sales_info_capture", sales_info_capture)
     workflow.add_node("sales_proposal_generate", sales_proposal_generate)
+    workflow.add_node("sales_agent_feedback", sales_agent_feedback)
+    workflow.add_node("sales_proposal_share", sales_proposal_share)
     workflow.add_node("sales_proposal_confirm", sales_proposal_confirm)
 
     workflow.add_conditional_edges("entry_node", support_router, {
@@ -63,6 +69,8 @@ def create_graph():
         "service_status_check": "service_status_check",
         "lookup_failure_node": "lookup_failure_node",
         "sales_start": "sales_start",
+        "sales_info_capture": "sales_info_capture",
+        "sales_proposal_review": "sales_proposal_review",
         "__end__": END
     })
 
@@ -130,23 +138,24 @@ def create_graph():
     })
     
     # Unregistered path sequence merges directly into standard escalation
-    workflow.add_conditional_edges("service_unregistered_start", unregistered_system_router, {
-        "service_unregistered_start": "service_unregistered_start",
-        "service_issue_capture": "service_issue_capture",
-        "__end__": END
-    })
+    workflow.add_edge("service_unregistered_start", END)
     
     workflow.add_edge("service_live_chat_start", END)
     workflow.add_edge("service_ticket_create", END)
     
-    workflow.add_edge("service_nps_and_close", END)
+    workflow.add_conditional_edges("service_nps_and_close", service_nps_router, {
+        "service_nps_and_close": "service_nps_and_close",
+        "__end__": END
+    })
+    
 
-    # Sales edges
     workflow.add_conditional_edges("sales_start", sales_router, {
         "sales_proposal_review": "sales_proposal_review",
         "sales_info_capture": "sales_info_capture",
         "sales_proposal_generate": "sales_proposal_generate",
         "sales_proposal_confirm": "sales_proposal_confirm",
+        "sales_agent_feedback": "sales_agent_feedback",
+        "sales_proposal_share": "sales_proposal_share",
         "__end__": END
     })
     
@@ -154,26 +163,50 @@ def create_graph():
         "sales_proposal_review": "sales_proposal_review",
         "sales_info_capture": "sales_info_capture",
         "sales_proposal_confirm": "sales_proposal_confirm",
+        "sales_agent_feedback": "sales_agent_feedback",
+        "sales_proposal_share": "sales_proposal_share",
         "__end__": END
     })
     
     workflow.add_conditional_edges("sales_info_capture", sales_router, {
         "sales_info_capture": "sales_info_capture",
         "sales_proposal_generate": "sales_proposal_generate",
+        "sales_agent_feedback": "sales_agent_feedback",
+        "sales_proposal_share": "sales_proposal_share",
         "__end__": END
     })
     
     workflow.add_conditional_edges("sales_proposal_generate", sales_router, {
         "sales_proposal_generate": "sales_proposal_generate",
+        "sales_agent_feedback": "sales_agent_feedback",
+        "sales_proposal_share": "sales_proposal_share",
+        "__end__": END
+    })
+    
+    workflow.add_conditional_edges("sales_agent_feedback", sales_router, {
+        "sales_agent_feedback": "sales_agent_feedback",
+        "sales_proposal_share": "sales_proposal_share",
+        "sales_proposal_confirm": "sales_proposal_confirm", # Added confirm as a safety
+        "__end__": END
+    })
+
+    workflow.add_conditional_edges("sales_proposal_share", sales_router, {
+        "sales_proposal_share": "sales_proposal_share",
         "sales_proposal_confirm": "sales_proposal_confirm",
+        "sales_agent_feedback": "sales_agent_feedback", # Added as a safety
         "__end__": END
     })
     
     workflow.add_conditional_edges("sales_proposal_confirm", sales_router, {
         "sales_proposal_confirm": "sales_proposal_confirm",
+        "sales_agent_feedback": "sales_agent_feedback",
+        "sales_proposal_share": "sales_proposal_share",
         "__end__": END
     })
 
-    return workflow.compile()
+    # NUCLEAR FIX: Use MemorySaver to avoid any SQLite locking or corruption during the demo
+    checkpointer = MemorySaver()
+    return workflow.compile(checkpointer=checkpointer)
 
+# Exported for LangGraph Platform / Aegra
 graph = create_graph()
