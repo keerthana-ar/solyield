@@ -1,79 +1,58 @@
-# SunBun Solar Assistant Backend
+# SunBun Solar Assistant - LEVEL 2 (Aegra Ready)
 
-This repository contains the backend and frontend systems for the SunBun Solar AI Assistant, built using LangGraph, FastAPI, and Next.js. The assistant acts as a deterministic state machine, flawlessly routing inquiries for both **Sales Support** and **Service Support**, handling dynamic user interactions, authentication, missing record pathways, and progressive data collection.
+This repository contains the advanced Level 2 implementation of the SunBun Solar AI Assistant. It is built using **LangGraph**, **FastAPI**, and **Next.js**, featuring a proactive high-order agent architecture and official **Agent Protocol** alignment.
 
-## Application Architecture
+The assistant acts as a sophisticated state machine, intelligently managing:
+- **Sales Support**: Proactive AI assistant with design recommendations and agent feedback loops.
+- **Service Support**: Multi-turn resolution with satisfaction tracking (NPS) and ticket generation.
+- **Authentication**: Seamless OTP-based identification with CRM lookup bypass.
 
-- **LangGraph Routing Engine (`src/graph.py`):** Acts as the central state machine graph, intelligently routing conversations and managing conversation state progression.
-- **Support Workflows (`src/nodes/`):** Dedicated Python modules containing isolated flow logic for authentication (`auth.py`), CRM lookup (`lookup.py`), Service routing (`service.py`), unregistered fallback (`unregistered.py`), and Sales routing (`sales.py`).
-- **FastAPI Server (`app.py`):** Wraps the graph definition into a local streaming Web Server complying with the unified Agent Protocol.
-- **Next.js Frontend (`apps/web`):** The React-based conversation UI displaying dynamic support choices and proposals.
+## 🚀 Level 2 & Week 2 Bonus Features
+
+### 1. Proactive AI Sales Assistant (Bonus)
+The AI doesn't just list options; it acts as a **Sales Assistant to YOU**. Once proposals are generated, the AI proactively recommends the top design, offers to list more details, and waits for your (the sales agent's) feedback before sharing with the customer.
+
+### 2. Zero-Metadata SSE Streaming
+A custom, lightning-fast **Server-Sent Events (SSE)** protocol. By stripping metadata overhead and strictly adhering to the `values` event schema, the backend provides 100% compatibility with the LangGraph React SDK, eliminating `StreamError` crashes.
+
+### 3. Agent Protocol (ap/v1) Readiness
+The FastAPI layer is architected to support standard Agent Protocol endpoints, ensuring that conversation persistence and task tracking are ready for production deployment on platforms like LangGraph Aegra.
+
+### 4. Optimized In-Memory Persistence
+Using `MemorySaver`, the assistant handles multi-turn state transitions with ultra-low latency, making it perfect for high-speed hackathon demonstrations.
 
 ## 📸 Screenshots
-### Service Support
+### Service & Sales Flows
+*(See image links below for high-order routing and design options)*
+
 <img width="632" height="906" alt="image" src="https://github.com/user-attachments/assets/58b6c3d3-3988-4435-937c-1de42de1276c" />
-
-<img width="587" height="903" alt="image" src="https://github.com/user-attachments/assets/a2b5104d-fd9a-4b88-b934-604a06cc1ab7" />
-
-<img width="550" height="380" alt="image" src="https://github.com/user-attachments/assets/db80788c-609e-4a98-8aa0-c2c11c2f1899" />
-
-<img width="654" height="880" alt="image" src="https://github.com/user-attachments/assets/957806e2-5893-45ba-b17d-2b822e946a95" />
-
-<img width="597" height="880" alt="image" src="https://github.com/user-attachments/assets/00a0541e-3a7c-4330-bd3d-50455a63fa1c" />
-
-<img width="578" height="868" alt="image" src="https://github.com/user-attachments/assets/f389d930-ebd6-4ca6-aca0-1947e481d117" />
-
-
-### Sales Support
 <img width="592" height="906" alt="image" src="https://github.com/user-attachments/assets/daabb249-2245-4ad6-8b03-4053beefb183" />
 
-<img width="641" height="902" alt="image" src="https://github.com/user-attachments/assets/b48474d8-2afb-4506-b9ca-39623af90cd9" />
-
-<img width="621" height="908" alt="image" src="https://github.com/user-attachments/assets/b510ba46-df4b-4ef6-8288-c6a587dc32a5" />
-
-<img width="578" height="908" alt="image" src="https://github.com/user-attachments/assets/9538b3f8-e925-4978-be04-5c71ca9b3881" />
-
-<img width="558" height="891" alt="image" src="https://github.com/user-attachments/assets/9c9e6374-da2b-4d72-a56e-a46a317d403f" />
-
-<img width="587" height="679" alt="image" src="https://github.com/user-attachments/assets/c77af6eb-5a3c-4308-80e3-43b581a00c51" />
-
-
-
-## Running the Application Locally
-
-The project consists of two separate components that must both be running simultaneously: 
+## 🛠️ Running the Application Locally
 
 ### 1. Start the Python Backend
-The backend utilizes Python and FastAPI to manage the core logic. 
+The backend runs on FastAPI and exposes the graph via a streaming endpoint.
 
-```bash
+```powershell
 # From the root directory:
-python app.py
+$env:PYTHONPATH="."
+python src/server.py
 ```
-*The backend server will successfully boot up on `http://localhost:2024`.*
+*Backend runs on `http://localhost:8000`.*
 
-### 2. Start the Next.js Frontend UI
-The UI manages user interface components like checkboxes and buttons via React.
+### 2. Start the React UI
+The frontend uses the `@langchain/langgraph-sdk` to communicate with the backend.
 
 ```bash
-# In a new, separate terminal tab, deploy the web server:
-cd apps/web
-pnpm run dev
+# In a new terminal tab:
+cd my-agent-ui
+npm run dev
 ```
-*The React UI will launch and become accessible within your web browser on `http://localhost:3000`.*
+*Frontend runs on `http://localhost:3000`.*
 
-## System Capabilities
+## 🏗️ Application Architecture
 
-### 1. Robust Service Workflows
-- Full-fledged Authentication with OTP validation.
-- Live database queries parsing user accounts. 
-- Auto-routing for identified technical issues based on specific hardware queries.
-- Smooth transition sequences into "Unregistered" logic tunnels. 
-- Progressive multi-turn dialogs pausing on specific graph nodes for data collection.
-
-### 2. Proposal Generation & CRM Logic
-- Extracts user data to match and list existing proposals cleanly.
-- Capable of generating brand-new proposal cards dynamically.
-- Automatically handles CRM ticket creation (via fake system ID tracking).
-- Live-Agent Support handover simulation (with simulated availability checking).
-- Ambiguous prompt matching ("Sales" or "Service" directly typed into chat vs strict button-click dependencies).
+- **LangGraph Core (`src/graph.py`):** Central state machine with conditional routing and sub-graph logic.
+- **Support Workflows (`src/nodes/`):** Isolated modules for Sales, Service, Entry, and Authentication.
+- **Clean Persistence:** All conversation data is handled in-memory for the demo, anchored by `thread_id`.
+- **Protocol-Aligned SSE**: Reliable real-time updates for complex multi-node transitions.

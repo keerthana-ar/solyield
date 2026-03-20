@@ -71,6 +71,8 @@ def create_graph(checkpointer=None):
         "sales_start": "sales_start",
         "sales_info_capture": "sales_info_capture",
         "sales_proposal_review": "sales_proposal_review",
+        "service_nps_and_close": "service_nps_and_close",
+        "service_unregistered_start": "service_unregistered_start",
         "__end__": END
     })
 
