@@ -23,10 +23,8 @@ Using `MemorySaver`, the assistant handles multi-turn state transitions with ult
 
 ## 📸 Screenshots
 ### Service & Sales Flows
-*(See image links below for high-order routing and design options)*
-
-<img width="632" height="906" alt="image" src="https://github.com/user-attachments/assets/58b6c3d3-3988-4435-937c-1de42de1276c" />
-<img width="592" height="906" alt="image" src="https://github.com/user-attachments/assets/daabb249-2245-4ad6-8b03-4053beefb183" />
+<video controls src="20260320-1749-01.2830612.mp4" title="Title"></video>
+<video controls src="20260320-1751-09.8023672.mp4" title="Title"></video>
 
 ## 🛠️ Running the Application Locally
 
